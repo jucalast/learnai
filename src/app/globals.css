@@ -1,0 +1,424 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #0a0a0a;
+  --foreground: #e5e5e5;
+  --color-background: #0a0a0a;
+  --color-foreground: #e5e5e5;
+  --color-primary: #404040;
+  --color-secondary: #262626;
+  --color-accent: #525252;
+  --color-border: #1f1f1f;
+  --color-muted: #737373;
+  
+  /* Text color variables */
+  --text-primary: #e5e5e5;      /* text-gray-100 */
+  --text-secondary: #d4d4d8;    /* text-gray-200 */
+  --text-tertiary: #a3a3a3;     /* text-gray-300 */
+  --text-muted: #737373;        /* text-gray-400 */
+  --text-subtle: #525252;       /* text-gray-500 */
+  
+  /* Background color variables */
+  --bg-primary: #0a0a0a;        /* bg-gray-900 */
+  --bg-secondary: #171717;      /* bg-gray-800 */
+  --bg-tertiary: #262626;       /* bg-gray-700 */
+  --bg-elevated: #404040;       /* bg-gray-600 */
+  --bg-subtle: #525252;         /* bg-gray-500 */
+  
+  /* Border color variables */
+  --border-primary: #171717;    /* border-gray-800 */
+  --border-secondary: #262626;  /* border-gray-700 */
+  --border-tertiary: #404040;   /* border-gray-600 */
+  --border-muted: #525252;      /* border-gray-500 */
+  --border-frame: #1f1f1f;      /* border-gray-750 - VS Code frame borders */
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Monaco Editor custom styles */
+.monaco-editor {
+  border-radius: 0;
+}
+
+/* Monaco Editor dark theme overrides */
+.monaco-editor {
+  border-radius: 0;
+  background-color: #0a0a0a !important;
+}
+
+.monaco-editor .monaco-editor-background {
+  background-color: #171717 !important;
+}
+
+.monaco-editor .margin {
+  background-color: #171717 !important;
+}
+
+.monaco-editor .current-line {
+  background-color: #1f1f1f !important;
+  border-color: #404040 !important;
+}
+
+.monaco-editor .line-numbers {
+  color: #737373 !important;
+}
+
+.monaco-editor .monaco-scrollable-element > .scrollbar > .slider {
+  background: rgba(64, 64, 64, 0.4) !important;
+}
+
+.monaco-editor .monaco-scrollable-element > .scrollbar > .slider:hover {
+  background: rgba(82, 82, 82, 0.6) !important;
+}
+
+/* Custom scrollbar for dark theme */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: #171717;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #404040;
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #525252;
+}
+
+/* Loading animation */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Responsive utilities */
+@layer utilities {
+  .h-mobile {
+    height: calc(100vh - 3rem);
+  }
+  
+  .h-desktop {
+    height: calc(100vh - 3.5rem);
+  }
+  
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  
+  /* Touch-friendly sizing */
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Smooth scrolling for mobile */
+  .smooth-scroll {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+  
+  /* Hide scrollbar on mobile but keep functionality */
+  .scrollbar-hidden {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hidden::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Dark mode utility classes */
+@layer utilities {
+  /* Dark theme specific utilities */
+  .bg-dark-primary {
+    background-color: #0a0a0a;
+  }
+  
+  .bg-dark-secondary {
+    background-color: #171717;
+  }
+  
+  .bg-dark-tertiary {
+    background-color: #262626;
+  }
+  
+  .bg-dark-elevated {
+    background-color: #1f1f1f;
+  }
+  
+  .border-dark {
+    border-color: #262626;
+  }
+  
+  .border-dark-light {
+    border-color: #404040;
+  }
+  
+  .text-dark-primary {
+    color: #e5e5e5;
+  }
+  
+  .text-dark-secondary {
+    color: #a3a3a3;
+  }
+  
+  .text-dark-muted {
+    color: #737373;
+  }
+  
+  /* Text utilities using CSS variables */
+  .text-primary {
+    color: var(--text-primary);
+  }
+  
+  .text-secondary {
+    color: var(--text-secondary);
+  }
+  
+  .text-tertiary {
+    color: var(--text-tertiary);
+  }
+  
+  .text-muted {
+    color: var(--text-muted);
+  }
+  
+  .text-subtle {
+    color: var(--text-subtle);
+  }
+  
+  /* Background utilities using CSS variables */
+  .bg-primary {
+    background-color: var(--bg-primary);
+  }
+  
+  .bg-secondary {
+    background-color: var(--bg-secondary);
+  }
+  
+  .bg-tertiary {
+    background-color: var(--bg-tertiary);
+  }
+  
+  .bg-elevated {
+    background-color: var(--bg-elevated);
+  }
+  
+  .bg-subtle {
+    background-color: var(--bg-subtle);
+  }
+  
+  /* Border utilities using CSS variables */
+  .border-primary {
+    border-color: var(--border-primary);
+  }
+  
+  .border-secondary {
+    border-color: var(--border-secondary);
+  }
+  
+  .border-tertiary {
+    border-color: var(--border-tertiary);
+  }
+  
+  .border-muted {
+    border-color: var(--border-muted);
+  }
+  
+  .border-frame {
+    border-color: var(--border-frame);
+  }
+  
+  /* Hover states */
+  .hover-bg-secondary:hover {
+    background-color: var(--bg-secondary);
+  }
+  
+  .hover-bg-tertiary:hover {
+    background-color: var(--bg-tertiary);
+  }
+  
+  .hover-bg-elevated:hover {
+    background-color: var(--bg-elevated);
+  }
+  
+  .hover-dark:hover {
+    background-color: #404040;
+  }
+  
+  .hover-dark-light:hover {
+    background-color: #525252;
+  }
+  
+  /* Remove blue elements */
+  .no-blue * {
+    border-color: #404040 !important;
+  }
+  
+  .no-blue *:focus {
+    outline-color: #525252 !important;
+    border-color: #525252 !important;
+  }
+}
+
+/* Component-specific dark theme */
+.ai-assistant {
+  background-color: #0a0a0a !important;
+  color: #e5e5e5 !important;
+}
+
+.ai-assistant .border {
+  border-color: #262626 !important;
+}
+
+.ai-assistant button {
+  background-color: #171717 !important;
+  border-color: #404040 !important;
+  color: #e5e5e5 !important;
+}
+
+.ai-assistant button:hover {
+  background-color: #262626 !important;
+  border-color: #525252 !important;
+}
+
+.ai-assistant input {
+  background-color: #171717 !important;
+  border-color: #404040 !important;
+  color: #e5e5e5 !important;
+}
+
+.ai-assistant input:focus {
+  border-color: #525252 !important;
+  outline-color: #525252 !important;
+}
+
+.ai-assistant .progress-bar {
+  background-color: #525252 !important;
+}
+
+/* Remove any blue elements globally */
+.blue-override {
+  background-color: #404040 !important;
+  border-color: #525252 !important;
+  color: #e5e5e5 !important;
+}
+
+.blue-override:hover {
+  background-color: #525252 !important;
+}
+
+/* Spinner animation with gray instead of blue */
+.spinner-gray {
+  border-color: #404040 #404040 #404040 transparent !important;
+}
+
+/* Responsive breakpoint adjustments */
+@media (max-width: 768px) {
+  /* Smaller font sizes for mobile */
+  .text-responsive {
+    font-size: 0.875rem;
+  }
+  
+  /* Compact spacing */
+  .space-compact > * + * {
+    margin-top: 0.5rem;
+  }
+  
+  /* Full width on mobile */
+  .mobile-full {
+    width: 100% !important;
+  }
+  
+  /* Hide on mobile */
+  .mobile-hidden {
+    display: none !important;
+  }
+  
+  /* Show only on mobile */
+  .mobile-only {
+    display: block !important;
+  }
+}
+
+@media (min-width: 769px) {
+  .mobile-only {
+    display: none !important;
+  }
+}
+
+/* Performance optimizations */
+.gpu-accelerated {
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  will-change: transform;
+}
+
+/* Focus styles for accessibility */
+.focus-ring:focus {
+  outline: 2px solid #525252;
+  outline-offset: 2px;
+}
+
+/* Improved Monaco Editor responsiveness */
+.monaco-editor .monaco-scrollable-element > .scrollbar > .slider {
+  background: rgba(121, 121, 121, 0.4) !important;
+}
+
+@media (max-width: 768px) {
+  .monaco-editor {
+    font-size: 14px !important;
+  }
+  
+  .monaco-editor .view-lines {
+    line-height: 1.4 !important;
+  }
+}
+
+/* Loading animation optimizations */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-spinner {
+  animation: spin 1s linear infinite;
+}
+
+/* Print styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
