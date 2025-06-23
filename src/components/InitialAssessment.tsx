@@ -426,10 +426,8 @@ print(f"Números pares dobrados: {numeros_processados}")`;
           break;
         
         case 'advanced':
-          demoCode = `# Vamos trabalhar com conceitos avançados!
-# O editor está pronto para você começar
-print("Pronto para conceitos avançados de Python!")`;
-          explanation = 'Ótimo! Como você já tem experiência, vou deixar o editor limpo para trabalharmos juntos em conceitos mais avançados conforme sua necessidade!';
+          demoCode = '';
+          explanation = 'Perfeito! Como você já tem experiência, vou deixar o editor vazio para que você possa começar a escrever. A IA inteligente vai observar seu código e oferecer sugestões contextuais conforme você desenvolve!';
           break;
       }
     }
@@ -443,15 +441,22 @@ print("Pronto para conceitos avançados de Python!")`;
       timestamp: new Date()
     });
 
-    // Simular digitação após delay
-    setTimeout(() => {
-      simulateTyping(demoCode);
-    }, 2000);
+    // Simular digitação após delay (apenas se houver código para digitar)
+    if (demoCode.trim()) {
+      setTimeout(() => {
+        simulateTyping(demoCode);
+      }, 2000);
 
-    // Após demo, começar interação
-    setTimeout(() => {
-      startInteractiveSession(assessment);
-    }, demoCode.length * 50 + 4000);
+      // Após demo, começar interação
+      setTimeout(() => {
+        startInteractiveSession(assessment);
+      }, demoCode.length * 50 + 4000);
+    } else {
+      // Se não há demo code, começar interação imediatamente
+      setTimeout(() => {
+        startInteractiveSession(assessment);
+      }, 2000);
+    }
   };
 
   const simulateTyping = (code: string) => {
@@ -480,15 +485,15 @@ print("Pronto para conceitos avançados de Python!")`;
         interactiveMsg = 'Que tal melhorar esta função? Tente adicionar um filtro para números ímpares também!';
         break;
       case 'advanced':
-        interactiveMsg = 'Vamos explorar! Que tal criar um context manager para medir memória também?';
+        interactiveMsg = 'Agora é com você! Comece a escrever qualquer código Python que quiser. A IA inteligente vai observar e reagir conforme você desenvolve, oferecendo sugestões contextuais e avançadas! 🚀';
         break;
     }
 
     onMessage({
       id: Date.now().toString(),
-      type: 'correction',
+      type: 'encouragement',
       suggestion: interactiveMsg,
-      explanation: 'Vou acompanhar suas modificações e te dar dicas!',
+      explanation: 'O sistema de IA observacional está ativo e pronto para te ajudar!',
       timestamp: new Date()
     });
   };

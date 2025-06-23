@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Bot, Eye, Lightbulb, CheckCircle, AlertCircle, Zap } from 'lucide-react';
-import { dualAI, CodeAnalysis, TeachingResponse } from '@/lib/dualAITeaching';
+import { Bot, Eye, Lightbulb, CheckCircle, AlertCircle, Zap, Brain, Activity } from 'lucide-react';
+import { intelligentWatcher, TeachingMoment, CodeEvent } from '@/lib/intelligentAIWatcher';
 
 interface TeachingContext {
   currentConcept: string;
@@ -11,13 +11,6 @@ interface TeachingContext {
   codeProgress: number;
   needsHelp: boolean;
   isStuck: boolean;
-}
-
-interface AIResponse {
-  message: string;
-  action?: 'demonstrate' | 'hint' | 'encourage' | 'correct' | 'advance';
-  nextConcept?: string;
-  codeExample?: string;
 }
 
 interface FluidAITeacherProps {
@@ -49,12 +42,11 @@ export default function FluidAITeacher({
   const [isTypingCode, setIsTypingCode] = useState(false);
   const [lastCodeChange, setLastCodeChange] = useState(Date.now());
   const [userIdleTime, setUserIdleTime] = useState(0);
-  const [lastAnalysis, setLastAnalysis] = useState<CodeAnalysis | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  
-  const codeAnalysisRef = useRef<NodeJS.Timeout | null>(null);
-  const watchingRef = useRef<NodeJS.Timeout | null>(null);
+  const [currentMoment, setCurrentMoment] = useState<TeachingMoment | null>(null);
+  const [watcherStats, setWatcherStats] = useState<any>({});
   const [recentMessages, setRecentMessages] = useState<string[]>([]);
+  
+  const watcherRef = useRef<NodeJS.Timeout | null>(null);
   const lastMessageRef = useRef<string>('');
 
   // Conceitos progressivos por linguagem
@@ -81,30 +73,30 @@ export default function FluidAITeacher({
 
   const conceptFlow = getConceptFlow(language, userLevel);
 
-  // Monitoramento inteligente do código
+  // Sistema inteligente de observação do código
   useEffect(() => {
     if (!currentCode) return;
 
     setLastCodeChange(Date.now());
     setUserIdleTime(0);
 
-    // Debounce para análise do código - mais responsivo
-    if (codeAnalysisRef.current) {
-      clearTimeout(codeAnalysisRef.current);
+    // Debounce para análise inteligente
+    if (watcherRef.current) {
+      clearTimeout(watcherRef.current);
     }
 
-    codeAnalysisRef.current = setTimeout(() => {
-      analyzeCodeInRealTime(currentCode);
-    }, 800); // Reduzido para ser mais responsivo
+    watcherRef.current = setTimeout(() => {
+      analyzeCodeWithIntelligentWatcher(currentCode);
+    }, 1200); // Tempo otimizado para análise
 
     return () => {
-      if (codeAnalysisRef.current) {
-        clearTimeout(codeAnalysisRef.current);
+      if (watcherRef.current) {
+        clearTimeout(watcherRef.current);
       }
     };
   }, [currentCode]);
 
-  // Observador de inatividade
+  // Observador de inatividade e timing
   useEffect(() => {
     if (!isWatching) return;
 
@@ -114,70 +106,53 @@ export default function FluidAITeacher({
       
       setUserIdleTime(idleSeconds);
 
-      // Se usuário está há mais de 8 segundos sem digitar (mais responsivo)
-      if (idleSeconds > 8 && idleSeconds < 12 && currentCode.length > 0) {
-        checkIfUserNeedsHelp();
-      }
-      
-      // Se está há muito tempo parado (reduzido para 25 segundos)
-      if (idleSeconds > 25) {
-        offerEncouragement();
+      // Análise periódica para detectar se usuário está travado
+      if (idleSeconds > 0 && idleSeconds % 10 === 0) {
+        analyzeCodeWithIntelligentWatcher(currentCode, idleSeconds);
       }
     }, 1000);
 
     return () => clearInterval(watchInterval);
   }, [isWatching, lastCodeChange, currentCode]);
 
-  // Análise em tempo real com Dual AI
-  const analyzeCodeInRealTime = useCallback(async (code: string) => {
-    if (!code.trim() || isAnalyzing) return;
+  // Nova função que usa o watcher inteligente
+  const analyzeCodeWithIntelligentWatcher = useCallback(async (code: string, idle: number = userIdleTime) => {
+    if (!code && idle < 10) return; // Evita análises desnecessárias
 
-    setIsAnalyzing(true);
-    
     try {
-      // API 1: Análise rápida
-      const analysis = await dualAI.analyzeCode(
+      const teachingMoment = await intelligentWatcher.watchAndRespond(
         code,
         context.currentConcept,
         context.userLevel,
-        userIdleTime
+        idle
       );
 
-      setLastAnalysis(analysis);
+      if (teachingMoment && teachingMoment.shouldRespond) {
+        setCurrentMoment(teachingMoment);
+        handleTeachingMoment(teachingMoment);
+      }
 
-      // API 2: Gerar resposta pedagógica
-      const teachingResponse = await dualAI.generateTeachingResponse(
-        analysis,
-        code,
-        conversation
-      );
-
-      // Reagir baseado na análise
-      handleTeachingResponse(teachingResponse, analysis);
+      // Atualiza estatísticas do watcher
+      setWatcherStats(intelligentWatcher.getStats());
 
     } catch (error) {
-      console.error('Erro na análise dual AI:', error);
-      // Fallback para análise local
-      const localAnalysis = analyzeCodeForConcept(code, context.currentConcept);
-      if (localAnalysis.isProgressing) {
-        reactToProgress(localAnalysis);
-      }
-    } finally {
-      setIsAnalyzing(false);
+      console.error('Erro no watcher inteligente:', error);
+      // Fallback para resposta básica
+      handleBasicFallback(code, idle);
     }
-  }, [context.currentConcept, context.userLevel, userIdleTime, conversation, isAnalyzing]);
+  }, [context.currentConcept, context.userLevel, userIdleTime]);
 
-  // Processar resposta do sistema de ensino
-  const handleTeachingResponse = useCallback((response: TeachingResponse, analysis: CodeAnalysis) => {
-    // Enviar mensagem da IA
-    speakToUser(response.message, response.action);
+  // Processa momento de ensino detectado pelo watcher
+  const handleTeachingMoment = useCallback((moment: TeachingMoment) => {
+    // Envia mensagem da IA
+    speakToUser(moment.message, moment.responseType);
 
-    // Executar ação se necessário
-    switch (response.action) {
+    // Executa ação específica baseada no tipo
+    switch (moment.responseType) {
       case 'demonstrate':
-        if (response.codeExample) {
+        if (moment.codeExample) {
           setTimeout(() => {
-            simulateTyping(response.codeExample!);
+            simulateTyping(moment.codeExample!);
           }, 2000);
         } else {
           setTimeout(() => {
@@ -187,165 +162,39 @@ export default function FluidAITeacher({
         break;
 
       case 'advance':
-        if (analysis.progress >= 80) {
-          setTimeout(() => {
-            advanceToNextConcept();
-          }, 2000);
-        }
+        setTimeout(() => {
+          advanceToNextConcept();
+        }, 2000);
         break;
 
       case 'hint':
-        // Já enviou a mensagem, nada mais a fazer
+      case 'encourage':
+      case 'correct':
+        // Mensagem já foi enviada
+        break;
+
+      case 'observe':
+        // Apenas observando, sem ação
         break;
     }
 
-    // Atualizar contexto
+    // Atualiza contexto baseado na resposta
     setContext(prev => ({
       ...prev,
-      codeProgress: analysis.progress,
-      needsHelp: analysis.isStuck,
-      isStuck: analysis.isStuck
+      needsHelp: moment.urgency === 'high',
+      isStuck: moment.responseType === 'demonstrate',
+      recentActions: [...prev.recentActions, moment.responseType].slice(-5)
     }));
   }, [context.currentConcept]);
 
-  // Análise local do código (sem API para rapidez)
-  const analyzeCodeForConcept = (code: string, concept: string) => {
-    const analysis = {
-      isProgressing: false,
-      hasErrors: false,
-      isStuck: false,
-      suggestions: [] as string[],
-      progress: 0
-    };
-
-    switch (concept) {
-      case 'variables':
-        if (code.includes('=') && !code.includes('==')) {
-          analysis.isProgressing = true;
-          analysis.progress = 30;
-        }
-        if (code.includes('print(')) {
-          analysis.progress = 70;
-        }
-        if (code.includes('=') && code.includes('print(')) {
-          analysis.progress = 100;
-        }
-        break;
-
-      case 'conditionals':
-        if (code.includes('if ')) {
-          analysis.isProgressing = true;
-          analysis.progress = 40;
-        }
-        if (code.includes('else')) {
-          analysis.progress = 70;
-        }
-        if (code.includes('elif')) {
-          analysis.progress = 90;
-        }
-        break;
-
-      case 'loops':
-        if (code.includes('for ') || code.includes('while ')) {
-          analysis.isProgressing = true;
-          analysis.progress = 50;
-        }
-        if (code.includes('range(')) {
-          analysis.progress = 80;
-        }
-        break;
-
-      case 'functions':
-        if (code.includes('def ')) {
-          analysis.isProgressing = true;
-          analysis.progress = 40;
-        }
-        if (code.includes('return')) {
-          analysis.progress = 80;
-        }
-        break;
+  // Fallback básico quando o watcher falha
+  const handleBasicFallback = useCallback((code: string, idle: number) => {
+    if (code.trim().length === 0 && idle > 15) {
+      speakToUser(`Vamos começar com ${context.currentConcept}! Escreva sua primeira linha de código ✨`, 'encourage');
+    } else if (idle > 30) {
+      speakToUser(`Observando seu código... precisa de uma dica com ${context.currentConcept}? 🤔`, 'hint');
     }
-
-    // Detectar erros comuns
-    if (code.includes('print') && !code.includes('print(')) {
-      analysis.hasErrors = true;
-      analysis.suggestions.push('Lembre-se dos parênteses em print()');
-    }
-
-    if (code.includes('if') && !code.includes(':')) {
-      analysis.hasErrors = true;
-      analysis.suggestions.push('Não esqueça dos dois pontos (:) após o if');
-    }
-
-    return analysis;
-  };
-
-  // Reações da IA baseadas no progresso
-  const reactToProgress = useCallback((analysis: any) => {
-    const messages = [
-      "Isso aí! Você está no caminho certo! 👍",
-      "Ótimo progresso! Continue assim!",
-      "Perfeito! Está entendendo bem o conceito!",
-      "Excelente! Vejo que você pegou a ideia!"
-    ];
-
-    const randomMessage = messages[Math.floor(Math.random() * messages.length)];
-    speakToUser(randomMessage, 'encouragement');
-
-    // Atualizar contexto
-    setContext(prev => ({
-      ...prev,
-      codeProgress: analysis.progress,
-      needsHelp: false,
-      isStuck: false
-    }));
-
-    // Se completou o conceito, avançar
-    if (analysis.progress >= 100) {
-      setTimeout(() => {
-        advanceToNextConcept();
-      }, 2000);
-    }
-  }, []);
-
-  const reactToErrors = useCallback((analysis: any) => {
-    if (analysis.suggestions.length > 0) {
-      const hint = `💡 ${analysis.suggestions[0]}`;
-      speakToUser(hint, 'hint');
-    }
-  }, []);
-
-  const reactToConfusion = useCallback((analysis: any) => {
-    const helpMessages = [
-      "Posso ajudar com alguma coisa? Vejo que você parou um pouco...",
-      "Alguma dúvida? Estou aqui para ajudar!",
-      "Que tal uma dica? Posso explicar melhor!"
-    ];
-
-    const message = helpMessages[Math.floor(Math.random() * helpMessages.length)];
-    speakToUser(message, 'suggestion');
-  }, []);
-
-  const checkIfUserNeedsHelp = useCallback(() => {
-    if (context.codeProgress < 30) {
-      const concept = context.currentConcept;
-      speakToUser(
-        `Vejo que você está começando com ${concept}. Quer que eu te dê um exemplo primeiro?`,
-        'suggestion'
-      );
-    }
-  }, [context]);
-
-  const offerEncouragement = useCallback(() => {
-    const messages = [
-      "Não desista! Programar é assim mesmo, devagar e sempre! 💪",
-      "Está pensando? Ótimo! Tomar tempo para entender é importante.",
-      "Precisa de uma pausa? Ou quer que eu te ajude com o próximo passo?"
-    ];
-
-    const message = messages[Math.floor(Math.random() * messages.length)];
-    speakToUser(message, 'encouragement');
-  }, []);
+  }, [context.currentConcept]);
 
   // Comunicação fluida com o usuário
   const speakToUser = useCallback((message: string, type: string) => {
@@ -370,36 +219,24 @@ export default function FluidAITeacher({
   const demonstrateConcept = useCallback(async (concept: string) => {
     setIsTypingCode(true);
     
-    // Ao invés de código pré-definido, vamos gerar com a IA
     try {
-      // Criar uma análise básica para gerar demonstração
-      const demoAnalysis: CodeAnalysis = {
-        concept: concept,
-        progress: 0,
-        errors: [],
-        suggestions: [],
-        nextStep: `Demonstrar ${concept}`,
-        isStuck: false,
-        sentiment: 'progressing',
-        codeQuality: 'empty',
-        needsHelp: false
-      };
-      
-      const response = await dualAI.generateTeachingResponse(
-        demoAnalysis,
+      // Usar o watcher inteligente para gerar demonstração
+      const demoMoment = await intelligentWatcher.watchAndRespond(
         '# Vamos aprender juntos!',
-        [`Demonstre o conceito de ${concept} com código simples`]
+        concept,
+        context.userLevel,
+        0
       );
       
-      const code = response.codeExample || `# Exemplo de ${concept}\n# Vamos aprender juntos!`;
+      const code = demoMoment?.codeExample || getBasicConceptExample(concept);
       
-      simulateTyping(code);
+      await simulateTyping(code);
       
       setTimeout(() => {
         onMessage({
           id: Date.now().toString(),
           type: 'explanation',
-          suggestion: response.message || `Aqui está um exemplo de ${concept}. Vamos praticá-lo juntos!`,
+          suggestion: demoMoment?.message || `Aqui está um exemplo de ${concept}. Vamos praticá-lo juntos!`,
           explanation: `Demonstração prática de ${concept}`,
           timestamp: new Date()
         });
@@ -407,15 +244,45 @@ export default function FluidAITeacher({
       
     } catch (error) {
       // Fallback simples em caso de erro
-      const fallbackCode = `# Vamos aprender ${concept}!\n# Digite seu código aqui`;
-      simulateTyping(fallbackCode);
+      const fallbackCode = getBasicConceptExample(concept);
+      await simulateTyping(fallbackCode);
     }
     
     setIsTypingCode(false);
-  }, [onMessage, currentCode, userLevel]);
+  }, [onMessage, context.userLevel]);
+
+  // Exemplos básicos para fallback
+  const getBasicConceptExample = (concept: string): string => {
+    const examples: Record<string, string> = {
+      variables: `# Exemplo de variáveis
+nome = "Python"
+idade = 25
+print(f"Olá, {nome}! Você tem {idade} anos.")`,
+
+      conditionals: `# Exemplo de condicionais
+idade = 18
+if idade >= 18:
+    print("Você é maior de idade")
+else:
+    print("Você é menor de idade")`,
+
+      loops: `# Exemplo de loops
+for i in range(5):
+    print(f"Número: {i}")`,
+
+      functions: `# Exemplo de funções
+def saudacao(nome):
+    return f"Olá, {nome}!"
+
+resultado = saudacao("Python")
+print(resultado)`
+    };
+
+    return examples[concept] || `# Vamos aprender ${concept}!\n# Digite seu código aqui`;
+  };
 
   // Simulação natural de digitação
-  const simulateTyping = useCallback((code: string) => {
+  const simulateTyping = useCallback((code: string): Promise<void> => {
     return new Promise<void>((resolve) => {
       let index = 0;
       const typeSpeed = 50 + Math.random() * 30; // Velocidade mais humana
@@ -460,10 +327,13 @@ export default function FluidAITeacher({
         needsHelp: false,
         isStuck: false
       }));
+
+      // Reset do watcher para novo conceito
+      intelligentWatcher.resetForNewConcept(nextConcept);
       
       speakToUser(
         `🎉 Parabéns! Você dominou ${context.currentConcept}! Agora vamos para ${nextConcept}!`,
-        'encouragement'
+        'encourage'
       );
       
       setTimeout(() => {
@@ -472,10 +342,10 @@ export default function FluidAITeacher({
     } else {
       speakToUser(
         "🎊 Incrível! Você completou todos os conceitos! Agora pode explorar livremente!",
-        'encouragement'
+        'encourage'
       );
     }
-  }, [context.currentConcept, conceptFlow, demonstrateConcept]);
+  }, [context.currentConcept, conceptFlow]);
 
   // Inicializar o ensino
   useEffect(() => {
@@ -483,7 +353,7 @@ export default function FluidAITeacher({
       setTimeout(() => {
         speakToUser(
           `Olá! Vou te ensinar ${language} de forma interativa. Vou observar tudo que você faz e te ajudar em tempo real! 🚀`,
-          'encouragement'
+          'encourage'
         );
         
         setTimeout(() => {
@@ -495,27 +365,26 @@ export default function FluidAITeacher({
 
   return (
     <div className="space-y-4">
-      {/* Status de Observação */}
+      {/* Status de Observação Inteligente */}
       <div className="bg-primary border border-secondary rounded-lg p-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <div className={`w-2 h-2 rounded-full ${isWatching ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`} />
-            <Eye className="w-4 h-4 text-muted" />
+            <Brain className="w-4 h-4 text-blue-400" />
             <span className="text-xs text-secondary">
-              {isAnalyzing ? 'Analisando com IA...' : isWatching ? 'Observando seu código...' : 'Modo observação pausado'}
+              {currentMoment?.shouldRespond ? 'IA reagindo...' : isWatching ? 'Observando seu código...' : 'Modo observação pausado'}
             </span>
           </div>
           
           <div className="flex items-center space-x-2">
             <span className="text-xs text-subtle">
               {context.currentConcept} - {context.codeProgress}%
-              {lastAnalysis && ` (${lastAnalysis.sentiment})`}
+              {currentMoment && ` (${currentMoment.urgency})`}
             </span>
-            {isAnalyzing && (
+            {currentMoment?.shouldRespond && (
               <div className="flex items-center space-x-1">
-                <div className="w-1 h-1 bg-purple-500 rounded-full animate-bounce" />
-                <div className="w-1 h-1 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
-                <span className="text-xs text-purple-400">AI</span>
+                <Activity className="w-3 h-3 text-blue-400 animate-pulse" />
+                <span className="text-xs text-blue-400">AI</span>
               </div>
             )}
             {isTypingCode && (
@@ -535,6 +404,13 @@ export default function FluidAITeacher({
             style={{ width: `${context.codeProgress}%` }}
           />
         </div>
+
+        {/* Stats do Watcher Inteligente */}
+        {watcherStats && Object.keys(watcherStats).length > 0 && (
+          <div className="mt-2 text-xs text-subtle">
+            Eventos: {watcherStats.eventsProcessed} | Respostas: {watcherStats.responsesGiven}
+          </div>
+        )}
       </div>
 
       {/* Progresso dos Conceitos */}
@@ -568,7 +444,7 @@ export default function FluidAITeacher({
         </div>
       </div>
 
-      {/* Últimas Interações */}
+      {/* Últimas Interações da IA */}
       {conversation.length > 0 && (
         <div className="space-y-2">
           {conversation.slice(0, 3).map((message, index) => (
@@ -602,6 +478,13 @@ export default function FluidAITeacher({
         >
           Mostrar Exemplo
         </button>
+
+        {/* Indicador do status atual */}
+        {currentMoment && (
+          <div className="px-3 py-1 text-xs bg-purple-600 text-white rounded">
+            {currentMoment.responseType}: {currentMoment.urgency}
+          </div>
+        )}
       </div>
     </div>
   );
