@@ -7,9 +7,10 @@ import { Language } from '@/types';
 import { useResponsive } from '@/lib/useResponsive';
 import Sidebar from '@/components/Sidebar';
 import TopBar from '@/components/TopBar';
-import AIAssistant from '@/components/AIAssistant';
+import EnhancedAIAssistant from '@/components/EnhancedAIAssistant';
 import OutputPanel from '@/components/OutputPanel';
 import MobileActionButton from '@/components/MobileActionButton';
+import { MobileAIButton } from '@/components/MobileAIButton';
 
 // Carregamento dinâmico do editor para evitar problemas de SSR
 const CodeEditor = dynamic(() => import('@/components/CodeEditor'), {
@@ -30,7 +31,7 @@ export default function Home() {
   const [isAIActive, setIsAIActive] = useState<boolean>(true);
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
-  const [isOutputPanelOpen, setIsOutputPanelOpen] = useState<boolean>(true);
+  const [isOutputPanelOpen, setIsOutputPanelOpen] = useState<boolean>(false);
   
   const { isMobile } = useResponsive();
 
@@ -148,12 +149,12 @@ export default function Home() {
               ${isMobile ? 'h-1/3' : 'h-full'}
               border-t lg:border-t-0 lg:border-l border-frame
             `}>
-              <AIAssistant
+              <EnhancedAIAssistant
                 language={selectedLanguage.id}
-                code={currentCode}
+                currentCode={currentCode}
                 onCodeChange={handleCodeChange}
+                onMessage={(message: any) => console.log('Message:', message)}
                 isActive={isAIActive}
-                isMobile={isMobile}
               />
             </div>
           </div>
@@ -176,10 +177,14 @@ export default function Home() {
 
       {/* Mobile Action Button */}
       {isMobile && (
-        <MobileActionButton
+        <MobileAIButton
+          onToggleAI={() => setIsAIActive(!isAIActive)}
+          onToggleOutput={() => setIsOutputPanelOpen(!isOutputPanelOpen)}
           onRun={handleRun}
-          onSave={handleSave}
-          onReset={handleReset}
+          isAIActive={isAIActive}
+          isOutputActive={isOutputPanelOpen}
+          hasNotifications={false}
+          assessmentCompleted={false}
         />
       )}
     </div>

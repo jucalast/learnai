@@ -338,30 +338,8 @@ Responda APENAS JSON:
    * Resposta de fallback quando APIs falham
    */
   private createFallbackResponse(code: string, concept: string, timeIdle: number): TeachingMoment {
-    if (code.trim().length === 0) {
-      return {
-        shouldRespond: true,
-        urgency: 'medium',
-        responseType: 'encourage',
-        message: `Vamos começar com ${concept}! Escreva sua primeira linha de código ✨`
-      };
-    }
-
-    if (timeIdle > 25) {
-      return {
-        shouldRespond: true,
-        urgency: 'high',
-        responseType: 'hint',
-        message: `Observando seu código... precisa de uma dica com ${concept}? 🤔`
-      };
-    }
-
-    return {
-      shouldRespond: false,
-      urgency: 'low',
-      responseType: 'observe',
-      message: ''
-    };
+    console.error('❌ AI Watcher falhou - sem fallback disponível');
+    throw new Error('Não é possível gerar resposta de ensino - API indisponível');
   }
 
   /**

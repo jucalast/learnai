@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Bot, MessageCircle, Lightbulb, Target, AlertCircle, Send, BookOpen, Play } from 'lucide-react';
 import FluidAITeacher from './FluidAITeacher';
-import InitialAssessment, { UserAssessment } from './InitialAssessment';
+import InitialAssessment, { OriginalAssessment } from './InitialAssessment';
+import { UserAssessment } from '@/types/learningSystem';
 import { AdaptiveLearningManager, AdaptiveLearningState, Topic } from '../lib/adaptiveLearning';
+import useDatabase from '@/hooks/useDatabase';
 
 interface Message {
   id: string;
@@ -25,6 +27,9 @@ interface AIAssistantProps {
 type AssistantMode = 'assessment' | 'conversation' | 'structured-learning';
 
 export default function AIAssistant({ language, code, onCodeChange, isActive }: AIAssistantProps) {
+  // 🗄️ Database integration
+  const [dbState, dbActions] = useDatabase();
+  
   const [messages, setMessages] = useState<Message[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [mode, setMode] = useState<AssistantMode>('assessment');
@@ -42,18 +47,45 @@ export default function AIAssistant({ language, code, onCodeChange, isActive }: 
     setLearningManager(manager);
   }, []);
 
-  // Resetar quando linguagem muda
+  // Resetar quando linguagem muda - OTIMIZADO para evitar re-renders desnecessários
+  const previousLanguageRef = useRef<string>('');
+  
   useEffect(() => {
-    if (language) {
-      setMode('assessment');
-      setMessages([]);
-      setShowTopics(false);
-      // Limpar código quando trocar de linguagem
-      onCodeChange('');
+    if (language && language !== previousLanguageRef.current) {
+      console.log('🔄 AIAssistant - Language mudou de', previousLanguageRef.current, 'para', language);
+      
+      // Só resetar se realmente mudou de uma linguagem para outra
+      if (previousLanguageRef.current !== '') {
+        console.log('🔄 AIAssistant - Resetando por mudança real de linguagem');
+        setMode('assessment');
+        setMessages([]);
+        setShowTopics(false);
+        setUserAssessment(null);
+        // Limpar código quando trocar de linguagem
+        onCodeChange('');
+      } else {
+        console.log('🔄 AIAssistant - Primeira inicialização, não resetando');
+      }
+      
+      previousLanguageRef.current = language;
     }
   }, [language, onCodeChange]);
 
-  const handleAssessmentComplete = useCallback((assessment: UserAssessment) => {
+  const handleAssessmentComplete = useCallback((originalAssessment: OriginalAssessment) => {
+    // Converter OriginalAssessment para UserAssessment
+    const assessment: UserAssessment = {
+      id: Date.now().toString(),
+      language: originalAssessment.language,
+      level: originalAssessment.level === 'unknown' ? 'beginner' : originalAssessment.level,
+      experience: originalAssessment.experience,
+      interests: originalAssessment.interests,
+      previousKnowledge: originalAssessment.previousKnowledge,
+      learningStyle: 'mixed',
+      goals: ['aprender programação'],
+      timeAvailable: 'medium',
+      completedAt: new Date()
+    };
+    
     setUserAssessment(assessment);
     
     if (learningManager) {
@@ -73,9 +105,37 @@ export default function AIAssistant({ language, code, onCodeChange, isActive }: 
     }
   }, [learningManager]);
 
-  const handleMessage = useCallback((message: Message) => {
+  // 💾 Função para persistir mensagens no banco de dados
+  const persistChatMessage = useCallback(async (message: Message, isUser: boolean = false) => {
+    if (dbState.currentSession?.id) {
+      try {
+        // Usar o SessionService para adicionar mensagem de chat
+        await fetch('/api/chat/message', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: dbState.currentSession.id,
+            message: message.suggestion,
+            isUser,
+            messageType: message.type,
+            metadata: {
+              explanation: message.explanation,
+              language,
+              timestamp: message.timestamp
+            }
+          })
+        });
+      } catch (error) {
+        console.error('❌ Erro ao persistir mensagem:', error);
+      }
+    }
+  }, [dbState.currentSession, language]);
+
+  const handleMessage = useCallback(async (message: Message) => {
     setMessages(prev => [message, ...prev]);
-  }, []);
+    // Persistir mensagem da IA
+    await persistChatMessage(message, false);
+  }, [persistChatMessage]);
 
   const handleUserMessage = async () => {
     if (!userInput.trim()) return;
@@ -89,12 +149,17 @@ export default function AIAssistant({ language, code, onCodeChange, isActive }: 
     };
 
     setMessages(prev => [userMessage, ...prev]);
+    // Persistir mensagem do usuário
+    await persistChatMessage(userMessage, true);
+    
     setIsAnalyzing(true);
 
     // Simular resposta da IA baseada no contexto
-    setTimeout(() => {
+    setTimeout(async () => {
       const aiResponse = generateAIResponse(userInput, code, learningState);
       setMessages(prev => [aiResponse, ...prev]);
+      // Persistir resposta da IA
+      await persistChatMessage(aiResponse, false);
       setIsAnalyzing(false);
     }, 1500);
 
@@ -253,7 +318,7 @@ export default function AIAssistant({ language, code, onCodeChange, isActive }: 
               currentCode={code}
               onCodeChange={onCodeChange}
               onMessage={handleMessage}
-              userLevel={userAssessment?.level === 'unknown' ? 'beginner' : (userAssessment?.level || 'beginner')}
+              userLevel={userAssessment?.level || 'beginner'}
             />
           </div>
         </div>

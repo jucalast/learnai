@@ -146,10 +146,10 @@ export default function OutputPanel({ code, language, isRunning = false, isMobil
     count?: number;
   }) => (
     <button
-      className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+      className={`px-3 py-1.5 text-xs font-medium border-b-2 transition-colors ${
         activeTab === tab
-          ? 'text-white border-muted'
-          : 'text-muted border-transparent hover:text-secondary'
+          ? 'text-primary border-blue-400 bg-secondary'
+          : 'text-muted border-transparent hover:text-primary hover:bg-elevated'
       }`}
       onClick={() => setActiveTab(tab as any)}
     >
@@ -163,29 +163,29 @@ export default function OutputPanel({ code, language, isRunning = false, isMobil
   );
 
   return (
-    <div className="h-full bg-[#1e1e1e] border-t border-frame flex flex-col">
-      {/* Header with Tabs */}
-      <div className="h-10 md:h-12 bg-[#323233] border-b border-frame flex items-center justify-between">
+    <div className="h-full bg-secondary border-t border-frame flex flex-col">
+      {/* Header with Tabs - VS Code Style */}
+      <div className="h-8 md:h-9 bg-tertiary border-b border-frame flex items-center justify-between">
         <div className="flex">
-          <TabButton tab="output" label={isMobile ? "Saída" : "Saída"} />
-          {!isMobile && <TabButton tab="problems" label="Problemas" count={0} />}
-          {!isMobile && <TabButton tab="terminal" label="Terminal" />}
+          <TabButton tab="output" label={isMobile ? "OUTPUT" : "OUTPUT"} />
+          {!isMobile && <TabButton tab="problems" label="PROBLEMS" count={0} />}
+          {!isMobile && <TabButton tab="terminal" label="TERMINAL" />}
         </div>
         
-        <div className="flex items-center space-x-1 md:space-x-2 px-2 md:px-4">
+        <div className="flex items-center space-x-1 px-2 md:px-3">
           <button
-            className="p-1 hover-bg-elevated rounded"
+            className="p-1 hover-bg-elevated rounded text-muted hover:text-primary transition-colors"
             onClick={copyLogs}
-            title="Copiar logs"
+            title="Copiar saída"
           >
-            <Copy className="w-3 h-3 md:w-4 md:h-4 text-muted" />
+            <Copy className="w-3 h-3 md:w-4 md:h-4" />
           </button>
           <button
-            className="p-1 hover-bg-elevated rounded"
+            className="p-1 hover-bg-elevated rounded text-muted hover:text-primary transition-colors"
             onClick={clearLogs}
-            title="Limpar logs"
+            title="Limpar saída"
           >
-            <Trash2 className="w-3 h-3 md:w-4 md:h-4 text-muted" />
+            <Trash2 className="w-3 h-3 md:w-4 md:h-4" />
           </button>
         </div>
       </div>

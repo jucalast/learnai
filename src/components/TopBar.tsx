@@ -19,6 +19,7 @@ import {
   EyeOff
 } from 'lucide-react';
 import { Language } from '@/types';
+import { UserButton } from '@/components/auth';
 
 interface TopBarProps {
   language: Language;
@@ -129,6 +130,19 @@ export default function TopBar({
               <RotateCcw className="w-3 h-3 md:w-4 md:h-4 mr-1" />
               <span>Resetar</span>
             </button>
+            
+            <div className="w-px h-4 md:h-6 bg-elevated mx-1 md:mx-2"></div>
+            
+            <button
+              className={`flex items-center px-2 md:px-3 py-1 md:py-2 rounded transition-colors text-xs md:text-sm font-medium ${
+                isOutputPanelOpen ? 'bg-tertiary text-white' : 'hover-bg-tertiary text-tertiary'
+              }`}
+              onClick={onToggleOutputPanel}
+              title={isOutputPanelOpen ? 'Ocultar Terminal' : 'Mostrar Terminal'}
+            >
+              <Terminal className="w-3 h-3 md:w-4 md:h-4 mr-1" />
+              <span>Terminal</span>
+            </button>
           </>
         )}
       </div>
@@ -142,7 +156,7 @@ export default function TopBar({
               isOutputPanelOpen ? 'bg-tertiary text-white' : 'hover-bg-tertiary text-tertiary'
             }`}
             onClick={onToggleOutputPanel}
-            title="Console"
+            title={isOutputPanelOpen ? 'Ocultar Terminal' : 'Mostrar Terminal'}
           >
             <Terminal className="w-4 h-4" />
           </button>
@@ -172,6 +186,18 @@ export default function TopBar({
             >
               <Settings className="w-3 h-3 md:w-4 md:h-4" />
             </button>
+            
+            {/* User Button */}
+            <div className="w-px h-4 md:h-6 bg-elevated mx-1 md:mx-2"></div>
+            <UserButton />
+          </>
+        )}
+        
+        {/* Mobile User Button */}
+        {isMobile && (
+          <>
+            <div className="w-px h-4 bg-elevated mx-1"></div>
+            <UserButton />
           </>
         )}
       </div>

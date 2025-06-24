@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ChevronDown, ChevronRight, Code, BookOpen, Play, Settings, FileText } from 'lucide-react';
 import { Language } from '@/types';
 import { supportedLanguages, getLessonsByLanguage } from '@/lib/languages';
+import { UserStatus } from './UserStatus';
 
 interface SidebarProps {
   selectedLanguage: Language;
@@ -172,6 +173,9 @@ export default function Sidebar({
             </div>
           )}
         </div>
+        
+        {/* User Status */}
+        <UserStatus />
       </div>
 
       {/* Footer */}

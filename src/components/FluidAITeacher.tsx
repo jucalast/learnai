@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { Bot, Eye, Lightbulb, CheckCircle, AlertCircle, Zap, Brain, Activity } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { Bot, Settings, RotateCcw, Sparkles, Brain, Activity, Zap, CheckCircle, Eye, Lightbulb, AlertCircle } from 'lucide-react';
+import PersonalizedLearningSystem from './PersonalizedLearningSystem';
 import { intelligentWatcher, TeachingMoment, CodeEvent } from '@/lib/intelligentAIWatcher';
 
 interface TeachingContext {
@@ -21,6 +22,8 @@ interface FluidAITeacherProps {
   userLevel: 'beginner' | 'intermediate' | 'advanced';
 }
 
+type TeachingMode = 'personalized' | 'legacy';
+
 export default function FluidAITeacher({
   language,
   currentCode,
@@ -28,6 +31,14 @@ export default function FluidAITeacher({
   onMessage,
   userLevel
 }: FluidAITeacherProps) {
+  
+  // 🔴 TODOS OS HOOKS MOVIDOS PARA O TOPO (obrigatório pelo React)
+  
+  // Estado para controlar o modo de ensino
+  const [teachingMode, setTeachingMode] = useState<TeachingMode>('personalized');
+  const [showModeSelector, setShowModeSelector] = useState(false);
+
+  // Legacy context (mantido para compatibilidade)
   const [context, setContext] = useState<TeachingContext>({
     currentConcept: 'variables',
     userLevel,
@@ -36,7 +47,12 @@ export default function FluidAITeacher({
     needsHelp: false,
     isStuck: false
   });
-  
+
+  // Interface de chat para comunicação com usuário no modo personalizado
+  const [chatInput, setChatInput] = useState('');
+  const [isWaitingResponse, setIsWaitingResponse] = useState(false);
+
+  // Estados do modo legacy (sempre inicializados)
   const [conversation, setConversation] = useState<string[]>([]);
   const [isWatching, setIsWatching] = useState(true);
   const [isTypingCode, setIsTypingCode] = useState(false);
@@ -49,8 +65,34 @@ export default function FluidAITeacher({
   const watcherRef = useRef<NodeJS.Timeout | null>(null);
   const lastMessageRef = useRef<string>('');
 
+  // Estabilizar props para evitar re-renders desnecessários no PersonalizedLearningSystem
+  const stableLanguage = useMemo(() => language, [language]);
+  const stableCurrentCode = useMemo(() => currentCode, [currentCode]);
+  const stableOnCodeChange = useMemo(() => onCodeChange, [onCodeChange]);
+  const stableOnMessage = useMemo(() => onMessage, [onMessage]);
+
+  // Handler para mensagens do chat no modo personalizado
+  const handleChatMessage = useCallback(async () => {
+    if (!chatInput.trim() || isWaitingResponse) return;
+
+    setIsWaitingResponse(true);
+    
+    // Envia mensagem do usuário
+    const userMessage = {
+      id: Date.now().toString(),
+      type: 'user_question',
+      suggestion: chatInput,
+      explanation: 'Pergunta do usuário',
+      timestamp: new Date()
+    };
+    
+    onMessage(userMessage);
+    setChatInput('');
+    setIsWaitingResponse(false);
+  }, [chatInput, isWaitingResponse, onMessage]);
+
   // Conceitos progressivos por linguagem
-  const getConceptFlow = (lang: string, level: string) => {
+  const getConceptFlow = useCallback((lang: string, level: string) => {
     const flows = {
       python: {
         beginner: [
@@ -69,81 +111,148 @@ export default function FluidAITeacher({
     };
     
     return flows[lang as keyof typeof flows]?.[level as keyof typeof flows.python] || flows.python.beginner;
-  };
+  }, []);
 
-  const conceptFlow = getConceptFlow(language, userLevel);
+  const conceptFlow = useMemo(() => getConceptFlow(language, userLevel), [getConceptFlow, language, userLevel]);
 
-  // Sistema inteligente de observação do código
-  useEffect(() => {
-    if (!currentCode) return;
-
-    setLastCodeChange(Date.now());
-    setUserIdleTime(0);
-
-    // Debounce para análise inteligente
-    if (watcherRef.current) {
-      clearTimeout(watcherRef.current);
+  // Comunicação fluida com o usuário
+  const speakToUser = useCallback((message: string, type: string) => {
+    if (teachingMode !== 'legacy' || recentMessages.includes(message)) {
+      return;
     }
 
-    watcherRef.current = setTimeout(() => {
-      analyzeCodeWithIntelligentWatcher(currentCode);
-    }, 1200); // Tempo otimizado para análise
-
-    return () => {
-      if (watcherRef.current) {
-        clearTimeout(watcherRef.current);
-      }
+    const aiMessage = {
+      id: Date.now().toString(),
+      type: type,
+      suggestion: message,
+      explanation: `Observando: ${context.currentConcept}`,
+      timestamp: new Date()
     };
-  }, [currentCode]);
 
-  // Observador de inatividade e timing
-  useEffect(() => {
-    if (!isWatching) return;
+    onMessage(aiMessage);
+    setConversation(prev => [message, ...prev.slice(0, 4)]); // Manter últimas 5 mensagens
+    setRecentMessages(prev => [message, ...prev.slice(0, 4)]); // Manter últimas 5 mensagens
+  }, [teachingMode, context.currentConcept, onMessage, recentMessages]);
 
-    const watchInterval = setInterval(() => {
-      const timeSinceLastChange = Date.now() - lastCodeChange;
-      const idleSeconds = Math.floor(timeSinceLastChange / 1000);
-      
-      setUserIdleTime(idleSeconds);
-
-      // Análise periódica para detectar se usuário está travado
-      if (idleSeconds > 0 && idleSeconds % 10 === 0) {
-        analyzeCodeWithIntelligentWatcher(currentCode, idleSeconds);
-      }
-    }, 1000);
-
-    return () => clearInterval(watchInterval);
-  }, [isWatching, lastCodeChange, currentCode]);
-
-  // Nova função que usa o watcher inteligente
-  const analyzeCodeWithIntelligentWatcher = useCallback(async (code: string, idle: number = userIdleTime) => {
-    if (!code && idle < 10) return; // Evita análises desnecessárias
-
-    try {
-      const teachingMoment = await intelligentWatcher.watchAndRespond(
-        code,
-        context.currentConcept,
-        context.userLevel,
-        idle
-      );
-
-      if (teachingMoment && teachingMoment.shouldRespond) {
-        setCurrentMoment(teachingMoment);
-        handleTeachingMoment(teachingMoment);
-      }
-
-      // Atualiza estatísticas do watcher
-      setWatcherStats(intelligentWatcher.getStats());
-
-    } catch (error) {
-      console.error('Erro no watcher inteligente:', error);
-      // Fallback para resposta básica
-      handleBasicFallback(code, idle);
+  // Simulação de digitação fluida
+  const simulateTyping = useCallback(async (code: string) => {
+    if (teachingMode !== 'legacy') return;
+    
+    const words = code.split(' ');
+    let currentCode = '';
+    
+    for (let i = 0; i < words.length; i++) {
+      currentCode += (i > 0 ? ' ' : '') + words[i];
+      onCodeChange(currentCode);
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
-  }, [context.currentConcept, context.userLevel, userIdleTime]);
+  }, [teachingMode, onCodeChange]);
+
+  // Demonstração interativa de código
+  const demonstrateConcept = useCallback(async (concept: string) => {
+    if (teachingMode !== 'legacy') return;
+    
+    setIsTypingCode(true);
+    
+    try {
+      // Usar o watcher inteligente para gerar demonstração
+      const demoMoment = await intelligentWatcher.watchAndRespond(
+        `# Demonstração de ${concept}`,
+        concept,
+        context.userLevel,
+        0
+      );
+      
+      const code = demoMoment?.codeExample;
+      
+      if (!code) {
+        throw new Error('Nenhum código disponível - API necessária');
+      }
+      
+      await simulateTyping(code);
+      
+      setTimeout(() => {
+        if (!demoMoment?.message) {
+          throw new Error('AI não conseguiu gerar explicação para o exemplo');
+        }
+        
+        onMessage({
+          id: Date.now().toString(),
+          type: 'explanation',
+          suggestion: demoMoment.message,
+          explanation: `Demonstração prática de ${concept}`,
+          timestamp: new Date()
+        });
+      }, 2000);
+      
+    } catch (error) {
+      console.error('❌ Erro ao demonstrar conceito:', error);
+      throw error;
+    }
+    
+    setIsTypingCode(false);
+  }, [teachingMode, onMessage, context.userLevel, simulateTyping]);
+
+  // Avançar para próximo conceito
+  const advanceToNextConcept = useCallback(async () => {
+    if (teachingMode !== 'legacy') return;
+    
+    const currentIndex = conceptFlow.indexOf(context.currentConcept);
+    const nextIndex = currentIndex + 1;
+    
+    if (nextIndex < conceptFlow.length) {
+      const nextConcept = conceptFlow[nextIndex];
+      setContext(prev => ({ ...prev, currentConcept: nextConcept, codeProgress: 0 }));
+      
+      try {
+        // Usar IA para gerar mensagem de progresso
+        const progressMoment = await intelligentWatcher.watchAndRespond(
+          `// Conceito ${context.currentConcept} completado, avançando para ${nextConcept}`,
+          nextConcept,
+          context.userLevel,
+          0
+        );
+        
+        if (progressMoment?.message) {
+          setTimeout(() => {
+            speakToUser(progressMoment.message, 'encourage');
+            setTimeout(() => {
+              demonstrateConcept(nextConcept);
+            }, 3000);
+          }, 1000);
+        } else {
+          throw new Error('AI não conseguiu gerar mensagem de progresso');
+        }
+      } catch (error) {
+        console.error('❌ Erro ao gerar mensagem de progresso:', error);
+        throw error;
+      }
+    } else {
+      try {
+        // Usar IA para gerar mensagem de conclusão
+        const completionMoment = await intelligentWatcher.watchAndRespond(
+          `// Todos os conceitos concluídos: ${conceptFlow.join(', ')}`,
+          'course_completion',
+          context.userLevel,
+          0
+        );
+        
+        if (completionMoment?.message) {
+          speakToUser(completionMoment.message, 'encourage');
+        } else {
+          throw new Error('AI não conseguiu gerar mensagem de conclusão');
+        }
+      } catch (error) {
+        console.error('❌ Erro ao gerar mensagem de conclusão:', error);
+        throw error;
+      }
+    }
+  }, [teachingMode, conceptFlow, context.currentConcept, context.userLevel, speakToUser, demonstrateConcept]);
 
   // Processa momento de ensino detectado pelo watcher
   const handleTeachingMoment = useCallback((moment: TeachingMoment) => {
+    if (teachingMode !== 'legacy') return;
+    
     // Envia mensagem da IA
     speakToUser(moment.message, moment.responseType);
 
@@ -185,307 +294,291 @@ export default function FluidAITeacher({
       isStuck: moment.responseType === 'demonstrate',
       recentActions: [...prev.recentActions, moment.responseType].slice(-5)
     }));
-  }, [context.currentConcept]);
+  }, [teachingMode, context.currentConcept, speakToUser, simulateTyping, demonstrateConcept, advanceToNextConcept]);
 
   // Fallback básico quando o watcher falha
   const handleBasicFallback = useCallback((code: string, idle: number) => {
-    if (code.trim().length === 0 && idle > 15) {
-      speakToUser(`Vamos começar com ${context.currentConcept}! Escreva sua primeira linha de código ✨`, 'encourage');
-    } else if (idle > 30) {
-      speakToUser(`Observando seu código... precisa de uma dica com ${context.currentConcept}? 🤔`, 'hint');
-    }
-  }, [context.currentConcept]);
-
-  // Comunicação fluida com o usuário
-  const speakToUser = useCallback((message: string, type: string) => {
-    if (recentMessages.includes(message)) {
-      return;
-    }
-
-    const aiMessage = {
-      id: Date.now().toString(),
-      type: type,
-      suggestion: message,
-      explanation: `Observando: ${context.currentConcept}`,
-      timestamp: new Date()
-    };
-
-    onMessage(aiMessage);
-    setConversation(prev => [message, ...prev.slice(0, 4)]); // Manter últimas 5 mensagens
-    setRecentMessages(prev => [message, ...prev.slice(0, 4)]); // Manter últimas 5 mensagens
-  }, [context.currentConcept, onMessage, recentMessages]);
-
-  // Demonstração interativa de código
-  const demonstrateConcept = useCallback(async (concept: string) => {
-    setIsTypingCode(true);
+    if (teachingMode !== 'legacy') return;
     
+    // Lança erro em vez de usar mensagens estáticas
+    console.error('❌ AI Watcher falhou - não é possível gerar encorajamento');
+    throw new Error('Não é possível gerar resposta de ensino - API indisponível');
+  }, [teachingMode]);
+
+  // Nova função que usa o watcher inteligente
+  const analyzeCodeWithIntelligentWatcher = useCallback(async (code: string, idle: number = userIdleTime) => {
+    if (teachingMode !== 'legacy' || (!code && idle < 10)) return; // Só executa no modo legacy
+
     try {
-      // Usar o watcher inteligente para gerar demonstração
-      const demoMoment = await intelligentWatcher.watchAndRespond(
-        '# Vamos aprender juntos!',
-        concept,
+      const teachingMoment = await intelligentWatcher.watchAndRespond(
+        code,
+        context.currentConcept,
         context.userLevel,
-        0
+        idle
       );
-      
-      const code = demoMoment?.codeExample || getBasicConceptExample(concept);
-      
-      await simulateTyping(code);
-      
-      setTimeout(() => {
-        onMessage({
-          id: Date.now().toString(),
-          type: 'explanation',
-          suggestion: demoMoment?.message || `Aqui está um exemplo de ${concept}. Vamos praticá-lo juntos!`,
-          explanation: `Demonstração prática de ${concept}`,
-          timestamp: new Date()
-        });
-      }, 2000);
-      
+
+      if (teachingMoment && teachingMoment.shouldRespond) {
+        setCurrentMoment(teachingMoment);
+        handleTeachingMoment(teachingMoment);
+      }
+
+      // Atualiza estatísticas do watcher
+      setWatcherStats(intelligentWatcher.getStats());
+
     } catch (error) {
-      // Fallback simples em caso de erro
-      const fallbackCode = getBasicConceptExample(concept);
-      await simulateTyping(fallbackCode);
+      console.error('Erro no watcher inteligente:', error);
+      // Fallback para resposta básica
+      handleBasicFallback(code, idle);
     }
-    
-    setIsTypingCode(false);
-  }, [onMessage, context.userLevel]);
+  }, [teachingMode, context.currentConcept, context.userLevel, userIdleTime, handleTeachingMoment, handleBasicFallback]);
 
-  // Exemplos básicos para fallback
-  const getBasicConceptExample = (concept: string): string => {
-    const examples: Record<string, string> = {
-      variables: `# Exemplo de variáveis
-nome = "Python"
-idade = 25
-print(f"Olá, {nome}! Você tem {idade} anos.")`,
-
-      conditionals: `# Exemplo de condicionais
-idade = 18
-if idade >= 18:
-    print("Você é maior de idade")
-else:
-    print("Você é menor de idade")`,
-
-      loops: `# Exemplo de loops
-for i in range(5):
-    print(f"Número: {i}")`,
-
-      functions: `# Exemplo de funções
-def saudacao(nome):
-    return f"Olá, {nome}!"
-
-resultado = saudacao("Python")
-print(resultado)`
-    };
-
-    return examples[concept] || `# Vamos aprender ${concept}!\n# Digite seu código aqui`;
-  };
-
-  // Simulação natural de digitação
-  const simulateTyping = useCallback((code: string): Promise<void> => {
-    return new Promise<void>((resolve) => {
-      let index = 0;
-      const typeSpeed = 50 + Math.random() * 30; // Velocidade mais humana
-      
-      onCodeChange(''); // Limpar
-      
-      const typeChar = () => {
-        if (index <= code.length) {
-          onCodeChange(code.substring(0, index));
-          index++;
-          
-          // Pausas naturais em pontos específicos
-          const char = code[index - 1];
-          let delay = typeSpeed;
-          
-          if (char === '\n') delay = typeSpeed * 3;
-          if (char === ':') delay = typeSpeed * 2;
-          if (char === '#') delay = typeSpeed * 4;
-          
-          setTimeout(typeChar, delay);
-        } else {
-          setIsTypingCode(false);
-          resolve();
-        }
-      };
-      
-      typeChar();
-    });
-  }, [onCodeChange]);
-
-  const advanceToNextConcept = useCallback(() => {
-    const currentIndex = conceptFlow.indexOf(context.currentConcept);
-    const nextIndex = currentIndex + 1;
-    
-    if (nextIndex < conceptFlow.length) {
-      const nextConcept = conceptFlow[nextIndex];
-      
-      setContext(prev => ({
-        ...prev,
-        currentConcept: nextConcept,
-        codeProgress: 0,
-        needsHelp: false,
-        isStuck: false
-      }));
-
-      // Reset do watcher para novo conceito
-      intelligentWatcher.resetForNewConcept(nextConcept);
-      
-      speakToUser(
-        `🎉 Parabéns! Você dominou ${context.currentConcept}! Agora vamos para ${nextConcept}!`,
-        'encourage'
-      );
-      
-      setTimeout(() => {
-        demonstrateConcept(nextConcept);
-      }, 3000);
-    } else {
-      speakToUser(
-        "🎊 Incrível! Você completou todos os conceitos! Agora pode explorar livremente!",
-        'encourage'
-      );
-    }
-  }, [context.currentConcept, conceptFlow]);
-
-  // Inicializar o ensino
+  // Sistema inteligente de observação do código (somente modo legacy)
   useEffect(() => {
-    if (language && conceptFlow.length > 0) {
-      setTimeout(() => {
-        speakToUser(
-          `Olá! Vou te ensinar ${language} de forma interativa. Vou observar tudo que você faz e te ajudar em tempo real! 🚀`,
-          'encourage'
+    if (teachingMode !== 'legacy' || !currentCode) return;
+
+    setLastCodeChange(Date.now());
+    setUserIdleTime(0);
+
+    // Debounce para análise inteligente
+    if (watcherRef.current) {
+      clearTimeout(watcherRef.current);
+    }
+
+    watcherRef.current = setTimeout(() => {
+      analyzeCodeWithIntelligentWatcher(currentCode);
+    }, 1200); // Tempo otimizado para análise
+
+    return () => {
+      if (watcherRef.current) {
+        clearTimeout(watcherRef.current);
+      }
+    };
+  }, [teachingMode, currentCode, analyzeCodeWithIntelligentWatcher]);
+
+  // Observador de inatividade e timing (somente modo legacy)
+  useEffect(() => {
+    if (teachingMode !== 'legacy' || !isWatching) return;
+
+    const watchInterval = setInterval(() => {
+      const timeSinceLastChange = Date.now() - lastCodeChange;
+      const idleSeconds = Math.floor(timeSinceLastChange / 1000);
+      
+      setUserIdleTime(idleSeconds);
+
+      // Análise periódica para detectar se usuário está travado
+      if (idleSeconds > 0 && idleSeconds % 10 === 0) {
+        analyzeCodeWithIntelligentWatcher(currentCode, idleSeconds);
+      }
+    }, 1000);
+
+    return () => clearInterval(watchInterval);
+  }, [teachingMode, isWatching, lastCodeChange, currentCode, analyzeCodeWithIntelligentWatcher]);
+
+  // Inicializar o ensino (somente modo legacy)
+  useEffect(() => {
+    if (teachingMode !== 'legacy' || !language || conceptFlow.length === 0) return;
+    
+    const initializeTeaching = async () => {
+      try {
+        // Usar IA para gerar mensagem de boas-vindas
+        const welcomeMoment = await intelligentWatcher.watchAndRespond(
+          `// Iniciando ensino de ${language} para nível ${userLevel}`,
+          'welcome',
+          userLevel,
+          0
         );
         
-        setTimeout(() => {
-          demonstrateConcept(context.currentConcept);
-        }, 2000);
-      }, 1000);
-    }
-  }, [language, userLevel]);
+        if (welcomeMoment?.message) {
+          setTimeout(() => {
+            speakToUser(welcomeMoment.message, 'encourage');
+            
+            setTimeout(() => {
+              demonstrateConcept(conceptFlow[0]);
+            }, 2000);
+          }, 1000);
+        } else {
+          throw new Error('AI não conseguiu gerar mensagem de boas-vindas');
+        }
+      } catch (error) {
+        console.error('❌ Erro ao inicializar ensino:', error);
+        // Não usar fallback - mostrar erro
+        throw error;
+      }
+    };
+    
+    initializeTeaching();
+  }, [teachingMode, language, conceptFlow, userLevel, speakToUser, demonstrateConcept]);
 
+  // Modo Personalizado (novo sistema)
+  if (teachingMode === 'personalized') {
+    return (
+      <div className="space-y-4">
+        {/* Cabeçalho com controles */}
+        <div className="bg-primary border border-secondary rounded-lg p-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Sparkles className="w-5 h-5 text-blue-400" />
+              <span className="text-sm font-medium text-secondary">
+                Sistema de Aprendizado Personalizado
+              </span>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setShowModeSelector(!showModeSelector)}
+                className="px-2 py-1 text-xs bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors"
+                title="Alternar modo de ensino"
+              >
+                <Settings className="w-3 h-3" />
+              </button>
+              
+              <button
+                onClick={() => setTeachingMode('legacy')}
+                className="px-2 py-1 text-xs bg-orange-600 text-white rounded hover:bg-orange-700 transition-colors"
+                title="Modo compatibilidade"
+              >
+                <RotateCcw className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+
+          {showModeSelector && (
+            <div className="mt-3 p-3 bg-secondary rounded border">
+              <p className="text-xs text-subtle mb-2">
+                Escolha o modo de ensino:
+              </p>
+              <div className="space-y-2">
+                <button
+                  onClick={() => {
+                    setTeachingMode('personalized');
+                    setShowModeSelector(false);
+                  }}
+                  className="block w-full text-left px-3 py-2 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  🎯 Personalizado - Assessment + Currículo + Chat/Editor integrados
+                </button>
+                <button
+                  onClick={() => {
+                    setTeachingMode('legacy');
+                    setShowModeSelector(false);
+                  }}
+                  className="block w-full text-left px-3 py-2 text-xs bg-gray-600 text-white rounded hover:bg-gray-700"
+                >
+                  🔧 Legado - Sistema original de observação
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Sistema de Aprendizado Personalizado */}
+        <PersonalizedLearningSystem
+          language={stableLanguage}
+          currentCode={stableCurrentCode}
+          onCodeChange={stableOnCodeChange}
+          onMessage={stableOnMessage}
+        />
+      </div>
+    );
+  }
+
+  // Modo Legacy (sistema original) - mantido para compatibilidade
   return (
     <div className="space-y-4">
-      {/* Status de Observação Inteligente */}
+      {/* Header com controles de modo e estatísticas */}
       <div className="bg-primary border border-secondary rounded-lg p-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <div className={`w-2 h-2 rounded-full ${isWatching ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`} />
-            <Brain className="w-4 h-4 text-blue-400" />
-            <span className="text-xs text-secondary">
-              {currentMoment?.shouldRespond ? 'IA reagindo...' : isWatching ? 'Observando seu código...' : 'Modo observação pausado'}
+            <Bot className="w-5 h-5 text-green-400" />
+            <span className="text-sm font-medium text-secondary">
+              IA Professora Observacional (Modo Legacy)
             </span>
+            {currentMoment && (
+              <div className="flex items-center space-x-1">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                <span className="text-xs text-green-400">
+                  {currentMoment.responseType === 'observe' ? 'Observando' : 'Respondendo'}
+                </span>
+              </div>
+            )}
           </div>
           
           <div className="flex items-center space-x-2">
-            <span className="text-xs text-subtle">
-              {context.currentConcept} - {context.codeProgress}%
-              {currentMoment && ` (${currentMoment.urgency})`}
-            </span>
-            {currentMoment?.shouldRespond && (
-              <div className="flex items-center space-x-1">
-                <Activity className="w-3 h-3 text-blue-400 animate-pulse" />
-                <span className="text-xs text-blue-400">AI</span>
-              </div>
-            )}
-            {isTypingCode && (
-              <div className="flex items-center space-x-1">
-                <div className="w-1 h-1 bg-blue-500 rounded-full animate-bounce" />
-                <div className="w-1 h-1 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
-                <div className="w-1 h-1 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
-              </div>
-            )}
-          </div>
-        </div>
-        
-        {/* Barra de Progresso */}
-        <div className="mt-2 w-full bg-secondary rounded-full h-1">
-          <div
-            className="bg-blue-500 h-1 rounded-full transition-all duration-300"
-            style={{ width: `${context.codeProgress}%` }}
-          />
-        </div>
-
-        {/* Stats do Watcher Inteligente */}
-        {watcherStats && Object.keys(watcherStats).length > 0 && (
-          <div className="mt-2 text-xs text-subtle">
-            Eventos: {watcherStats.eventsProcessed} | Respostas: {watcherStats.responsesGiven}
-          </div>
-        )}
-      </div>
-
-      {/* Progresso dos Conceitos */}
-      <div className="bg-primary border border-secondary rounded-lg p-3">
-        <h4 className="text-sm font-medium text-secondary mb-2 flex items-center">
-          <Zap className="w-4 h-4 mr-2 text-muted" />
-          Jornada de Aprendizado
-        </h4>
-        
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-          {conceptFlow.map((concept: string, index: number) => {
-            const isCompleted = conceptFlow.indexOf(context.currentConcept) > index;
-            const isCurrent = concept === context.currentConcept;
-            
-            return (
-              <div
-                key={concept}
-                className={`p-2 rounded text-xs text-center transition-all ${
-                  isCompleted
-                    ? 'bg-green-500 text-white'
-                    : isCurrent
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-secondary text-subtle'
-                }`}
-              >
-                {isCompleted && <CheckCircle className="w-3 h-3 mx-auto mb-1" />}
-                {concept}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Últimas Interações da IA */}
-      {conversation.length > 0 && (
-        <div className="space-y-2">
-          {conversation.slice(0, 3).map((message, index) => (
-            <div
-              key={index}
-              className="flex items-start space-x-2 bg-primary border border-secondary rounded-lg p-2"
+            <button
+              onClick={() => setTeachingMode('personalized')}
+              className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+              title="Modo personalizado"
             >
-              <Bot className="w-4 h-4 text-blue-500 mt-0.5" />
-              <p className="text-xs text-secondary">{message}</p>
+              <Sparkles className="w-3 h-3" />
+            </button>
+            
+            <button
+              onClick={() => setIsWatching(!isWatching)}
+              className={`px-2 py-1 text-xs rounded transition-colors ${
+                isWatching 
+                  ? 'bg-green-600 text-white hover:bg-green-700' 
+                  : 'bg-gray-600 text-white hover:bg-gray-700'
+              }`}
+              title={isWatching ? 'Pausar observação' : 'Retomar observação'}
+            >
+              <Eye className="w-3 h-3" />
+            </button>
+          </div>
+        </div>
+
+        {/* Estatísticas do contexto */}
+        <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+          <div className="bg-secondary rounded p-2">
+            <div className="text-subtle">Conceito atual</div>
+            <div className="text-primary font-medium capitalize">
+              {context.currentConcept.replace('_', ' ')}
             </div>
-          ))}
+          </div>
+          <div className="bg-secondary rounded p-2">
+            <div className="text-subtle">Tempo inativo</div>
+            <div className="text-primary font-medium">{userIdleTime}s</div>
+          </div>
+          <div className="bg-secondary rounded p-2">
+            <div className="text-subtle">Nível</div>
+            <div className="text-primary font-medium capitalize">{context.userLevel}</div>
+          </div>
+          <div className="bg-secondary rounded p-2">
+            <div className="text-subtle">Status</div>
+            <div className={`font-medium ${context.needsHelp ? 'text-yellow-400' : 'text-green-400'}`}>
+              {context.needsHelp ? 'Precisa ajuda' : 'Progredindo'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Debug info se disponível */}
+      {Object.keys(watcherStats).length > 0 && (
+        <div className="bg-secondary border border-secondary rounded-lg p-3">
+          <div className="text-xs text-subtle mb-2">Estatísticas do Watcher Inteligente:</div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+            {Object.entries(watcherStats).map(([key, value]) => (
+              <div key={key} className="bg-primary rounded p-2">
+                <div className="text-subtle capitalize">{key.replace(/([A-Z])/g, ' $1').toLowerCase()}</div>
+                <div className="text-primary font-mono">{String(value)}</div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
-      {/* Controles */}
-      <div className="flex space-x-2">
-        <button
-          onClick={() => setIsWatching(!isWatching)}
-          className={`px-3 py-1 text-xs rounded transition-colors ${
-            isWatching
-              ? 'bg-green-600 text-white hover:bg-green-700'
-              : 'bg-gray-600 text-white hover:bg-gray-700'
-          }`}
-        >
-          {isWatching ? 'Pausar Observação' : 'Iniciar Observação'}
-        </button>
-        
-        <button
-          onClick={() => demonstrateConcept(context.currentConcept)}
-          className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-        >
-          Mostrar Exemplo
-        </button>
-
-        {/* Indicador do status atual */}
-        {currentMoment && (
-          <div className="px-3 py-1 text-xs bg-purple-600 text-white rounded">
-            {currentMoment.responseType}: {currentMoment.urgency}
+      {/* Conversa recente */}
+      {conversation.length > 0 && (
+        <div className="bg-secondary border border-secondary rounded-lg p-3">
+          <div className="text-xs text-subtle mb-2">Últimas interações:</div>
+          <div className="space-y-1">
+            {conversation.slice(0, 3).map((msg, idx) => (
+              <div key={idx} className="text-xs text-primary bg-primary rounded p-2">
+                {msg}
+              </div>
+            ))}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

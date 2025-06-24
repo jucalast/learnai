@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Editor from '@monaco-editor/react';
 import { Language } from '@/types';
+import useDatabase from '@/hooks/useDatabase';
 
 interface CodeEditorProps {
   language: Language;
@@ -17,18 +18,68 @@ export default function CodeEditor({
   onChange,
   onCodeChange 
 }: CodeEditorProps) {
+  // 🗄️ Database integration
+  const [dbState] = useDatabase();
+  
   const [code, setCode] = useState(initialCode || language.defaultCode);
+  const lastCodeRef = useRef<string>('');
+  const changeTimeoutRef = useRef<NodeJS.Timeout>();
 
   useEffect(() => {
     setCode(initialCode || language.defaultCode);
+    lastCodeRef.current = initialCode || language.defaultCode;
   }, [language, initialCode]);
+
+  // 💾 Função para persistir eventos de código
+  const persistCodeEvent = useCallback(async (code: string, eventType: string) => {
+    if (dbState.currentSession?.id && code !== lastCodeRef.current) {
+      try {
+        await fetch('/api/code/event', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: dbState.currentSession.id,
+            eventType,
+            code,
+            explanation: `Code changed in ${language.name}`,
+            metadata: {
+              language: language.id,
+              timestamp: new Date().toISOString(),
+              codeLength: code.length
+            }
+          })
+        });
+        lastCodeRef.current = code;
+      } catch (error) {
+        console.error('❌ Erro ao persistir evento de código:', error);
+      }
+    }
+  }, [dbState.currentSession, language]);
 
   const handleEditorChange = useCallback((value: string | undefined) => {
     const newCode = value || '';
     setCode(newCode);
     onChange?.(newCode);
     onCodeChange?.(newCode);
-  }, [onChange, onCodeChange]);
+
+    // Debounce para evitar muitos eventos de mudança
+    if (changeTimeoutRef.current) {
+      clearTimeout(changeTimeoutRef.current);
+    }
+    
+    changeTimeoutRef.current = setTimeout(() => {
+      persistCodeEvent(newCode, 'code_change');
+    }, 2000); // Aguardar 2 segundos após a última mudança
+  }, [onChange, onCodeChange, persistCodeEvent]);
+
+  // Cleanup do timeout
+  useEffect(() => {
+    return () => {
+      if (changeTimeoutRef.current) {
+        clearTimeout(changeTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const editorOptions = {
     theme: 'vs-dark',

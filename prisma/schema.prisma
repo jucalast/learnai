@@ -1,0 +1,396 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===================================
+// 🚀 SCHEMA INTELIGENTE LEARNAI v2.0
+// ===================================
+
+// 👤 USUÁRIOS E PERFIS
+model User {
+  id        String   @id @default(cuid())
+  email     String?  @unique
+  username  String?  @unique
+  name      String?
+  password  String?  // Hash da senha
+  userType  String   @default("anonymous") // anonymous, registered, admin
+  isVerified Boolean @default(false) // Email verificado
+  lastLogin DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relacionamentos
+  sessions     LearningSession[]
+  assessments  UserAssessment[]
+  progress     UserProgress[]
+  achievements UserAchievement[]
+  analytics    UserAnalytics[]
+  preferences  UserPreferences?
+  authTokens   AuthToken[]
+  
+  @@map("users")
+}
+
+// 🔐 TOKENS DE AUTENTICAÇÃO E SESSÕES
+model AuthToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  type      String   // access, refresh, email_verification, password_reset
+  expiresAt DateTime
+  isUsed    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  
+  // Relacionamentos
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("auth_tokens")
+}
+
+// 📊 ASSESSMENT INTELIGENTE
+model UserAssessment {
+  id       String @id @default(cuid())
+  userId   String
+  language String
+
+  // Análise Inteligente de Nível (NOVA ARQUITETURA)
+  generalProgrammingLevel String // none, basic, intermediate, advanced
+  languageSpecificLevel   String // none, basic, intermediate, advanced
+  adaptiveLevel          String // beginner, intermediate_syntax, intermediate_concepts, advanced
+  level                  String // beginner, intermediate, advanced (compatibilidade)
+  
+  // Detalhes do Assessment
+  experience               String
+  interests                String[] // Array de strings
+  previousKnowledge        String[] // Array de strings
+  learningStyle           String   // visual, practical, theoretical, mixed
+  goals                   String[] // Array de strings
+  timeAvailable           String   // low, medium, high
+  programmingExperienceYears Int?
+  languageExperienceLevel String? // never_used, basic_syntax, some_projects, professional
+  
+  // Metadados
+  responses   Json     // Respostas originais do assessment
+  completedAt DateTime @default(now())
+  isActive    Boolean  @default(true)
+  
+  // Relacionamentos
+  user             User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  curriculum       PersonalizedCurriculum?
+  sessions         LearningSession[]
+  progressRecords  UserProgress[]
+  
+  @@map("user_assessments")
+}
+
+// 📚 CURRÍCULO PERSONALIZADO
+model PersonalizedCurriculum {
+  id                        String   @id @default(cuid())
+  assessmentId              String   @unique
+  language                  String
+  level                     String
+  adaptiveLevel            String?  // Nível adaptativo detectado
+  estimatedCompletionTime   Int      // em minutos
+  
+  // Dados do Currículo
+  topics                   CurriculumTopic[]
+  currentTopicIndex        Int       @default(0)
+  adaptationRules          Json      // Regras de adaptação
+  
+  // Metadados
+  createdAt                DateTime  @default(now())
+  lastUpdated              DateTime  @updatedAt
+  isCompleted              Boolean   @default(false)
+  completionPercentage     Float     @default(0.0)
+  
+  // Relacionamentos
+  assessment               UserAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  sessions                 LearningSession[]
+  
+  @@map("personalized_curricula")
+}
+
+// 📖 TÓPICOS DO CURRÍCULO
+model CurriculumTopic {
+  id                   String @id @default(cuid())
+  curriculumId         String
+  title                String
+  description          String
+  type                 String // concept, exercise, project, challenge
+  difficulty           Int    // 1-5
+  estimatedTime        Int    // em minutos
+  prerequisites        String[] // Array de títulos de tópicos
+  learningObjectives   String[] // Array de objetivos
+  tags                 String[] // Array de tags
+  priority             Int    // 1-10
+  adaptiveLevel        String? // beginner, intermediate_syntax, etc.
+  focusArea           String? // syntax, concepts, advanced, fundamentals
+  
+  // Conteúdo
+  codeExample          String?
+  explanation          String?
+  exercises            Json?   // Array de exercícios
+  
+  // Status
+  orderIndex           Int
+  isUnlocked           Boolean @default(false)
+  isCompleted          Boolean @default(false)
+  
+  // Relacionamentos
+  curriculum           PersonalizedCurriculum @relation(fields: [curriculumId], references: [id], onDelete: Cascade)
+  sessions             LearningSession[]
+  progress             TopicProgress[]
+  
+  @@map("curriculum_topics")
+}
+
+// 🎯 SESSÕES DE APRENDIZADO
+model LearningSession {
+  id           String   @id @default(cuid())
+  userId       String
+  assessmentId String?
+  curriculumId String?
+  topicId      String?
+  language     String
+  
+  // Dados da Sessão
+  startTime    DateTime @default(now())
+  endTime      DateTime?
+  duration     Int?     // em segundos
+  isActive     Boolean  @default(true)
+  
+  // Contexto da Sessão
+  sessionType  String   // assessment, learning, practice, review
+  currentCode  String?  // Código atual no editor
+  
+  // Relacionamentos
+  user         User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assessment   UserAssessment?         @relation(fields: [assessmentId], references: [id])
+  curriculum   PersonalizedCurriculum? @relation(fields: [curriculumId], references: [id])
+  topic        CurriculumTopic?        @relation(fields: [topicId], references: [id])
+  
+  messages     ChatMessage[]
+  codeEvents   CodeEvent[]
+  interactions UserInteraction[]
+  
+  @@map("learning_sessions")
+}
+
+// 💬 MENSAGENS DO CHAT
+model ChatMessage {
+  id          String   @id @default(cuid())
+  sessionId   String
+  type        String   // ai, user
+  content     String
+  messageType String?  // introduction, explanation, feedback, encouragement
+  topicId     String?
+  
+  // Metadados
+  timestamp   DateTime @default(now())
+  metadata    Json?    // Dados adicionais da mensagem
+  
+  // Relacionamentos
+  session     LearningSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  
+  @@map("chat_messages")
+}
+
+// ⌨️ EVENTOS DE CÓDIGO
+model CodeEvent {
+  id          String   @id @default(cuid())
+  sessionId   String
+  eventType   String   // code_change, code_generated, code_executed
+  code        String
+  explanation String?
+  
+  // Metadados
+  timestamp   DateTime @default(now())
+  metadata    Json?    // Line numbers, changes, etc.
+  
+  // Relacionamentos
+  session     LearningSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  
+  @@map("code_events")
+}
+
+// 👆 INTERAÇÕES DO USUÁRIO
+model UserInteraction {
+  id            String   @id @default(cuid())
+  sessionId     String
+  interactionType String // click, keyboard, scroll, focus, blur
+  element       String?  // Elemento interagido
+  details       Json?    // Detalhes da interação
+  
+  // Metadados
+  timestamp     DateTime @default(now())
+  
+  // Relacionamentos
+  session       LearningSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  
+  @@map("user_interactions")
+}
+
+// 📈 PROGRESSO DO USUÁRIO
+model UserProgress {
+  id             String   @id @default(cuid())
+  userId         String
+  assessmentId   String
+  language       String
+  
+  // Progresso Geral
+  totalTime      Int      @default(0) // em segundos
+  topicsCompleted String[] // Array de IDs de tópicos
+  exercisesCompleted String[] // Array de IDs de exercícios
+  currentScore   Float    @default(0.0)
+  overallProgress Float   @default(0.0) // 0-100%
+  
+  // Analytics de Aprendizado
+  strugglingAreas String[] // Áreas de dificuldade
+  strengthAreas   String[] // Áreas de força
+  adaptationsMade Int      @default(0)
+  
+  // Metadados
+  lastActivity   DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  // Relacionamentos
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assessment     UserAssessment @relation(fields: [assessmentId], references: [id])
+  topicProgress  TopicProgress[]
+  
+  @@map("user_progress")
+}
+
+// 📖 PROGRESSO POR TÓPICO
+model TopicProgress {
+  id              String   @id @default(cuid())
+  progressId      String
+  topicId         String
+  
+  // Status do Tópico
+  isStarted       Boolean  @default(false)
+  isCompleted     Boolean  @default(false)
+  completionDate  DateTime?
+  timeSpent       Int      @default(0) // em segundos
+  attempts        Int      @default(0)
+  
+  // Performance
+  score           Float?   // 0-100
+  difficulty      String?  // too_easy, just_right, too_hard
+  confidence      String?  // low, medium, high
+  
+  // Feedback
+  userRating      Int?     // 1-5 estrelas
+  feedback        String?
+  needsReview     Boolean  @default(false)
+  
+  // Relacionamentos
+  progress        UserProgress    @relation(fields: [progressId], references: [id], onDelete: Cascade)
+  topic           CurriculumTopic @relation(fields: [topicId], references: [id])
+  
+  @@unique([progressId, topicId])
+  @@map("topic_progress")
+}
+
+// 🏆 CONQUISTAS E GAMIFICAÇÃO
+model Achievement {
+  id          String @id @default(cuid())
+  title       String
+  description String
+  icon        String?
+  category    String // learning, streak, skill, milestone
+  condition   Json   // Condições para desbloquear
+  points      Int    @default(0)
+  rarity      String @default("common") // common, rare, epic, legendary
+  
+  // Relacionamentos
+  userAchievements UserAchievement[]
+  
+  @@map("achievements")
+}
+
+model UserAchievement {
+  id            String   @id @default(cuid())
+  userId        String
+  achievementId String
+  unlockedAt    DateTime @default(now())
+  progress      Float    @default(100.0) // Progresso para achievements parciais
+  
+  // Relacionamentos
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement   Achievement @relation(fields: [achievementId], references: [id])
+  
+  @@unique([userId, achievementId])
+  @@map("user_achievements")
+}
+
+// 📊 ANALYTICS AVANÇADAS
+model UserAnalytics {
+  id               String   @id @default(cuid())
+  userId           String
+  date             DateTime @default(now())
+  
+  // Métricas Diárias
+  timeSpent        Int      @default(0) // segundos
+  topicsViewed     Int      @default(0)
+  exercisesAttempted Int     @default(0)
+  codeGenerated    Int      @default(0)
+  messagesExchanged Int      @default(0)
+  
+  // Métricas de Engajamento
+  sessionCount     Int      @default(0)
+  avgSessionLength Float    @default(0.0)
+  longStreak       Int      @default(0) // Dias consecutivos
+  
+  // Métricas de Performance
+  successRate      Float    @default(0.0)
+  difficultyLevel  String?  // current difficulty preference
+  adaptationRate   Float    @default(0.0)
+  
+  // Metadados
+  metadata         Json?    // Dados adicionais de analytics
+  
+  // Relacionamentos
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, date])
+  @@map("user_analytics")
+}
+
+// 🎨 PREFERÊNCIAS E PERSONALIZAÇÕES
+model UserPreferences {
+  id                   String @id @default(cuid())
+  userId               String @unique
+  
+  // Preferências de Interface
+  theme                String @default("dark") // dark, light, auto
+  language             String @default("pt-BR")
+  fontSize             Int    @default(14)
+  editorTheme          String @default("vs-dark")
+  
+  // Preferências de Aprendizado
+  preferredPace        String @default("medium") // slow, medium, fast
+  aiAssistanceLevel    String @default("balanced") // minimal, balanced, maximum
+  notificationsEnabled Boolean @default(true)
+  
+  // Configurações Avançadas
+  autoSave             Boolean @default(true)
+  showHints            Boolean @default(true)
+  gamificationEnabled  Boolean @default(true)
+  
+  // Metadados
+  updatedAt            DateTime @updatedAt
+  
+  // Relacionamentos
+  user                 User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("user_preferences")
+}

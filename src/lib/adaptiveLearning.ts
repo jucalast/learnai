@@ -1,4 +1,4 @@
-import { UserAssessment } from '../components/InitialAssessment';
+import { UserAssessment } from '@/types/learningSystem';
 
 export interface LearningPath {
   id: string;
@@ -261,7 +261,7 @@ print(f"Saldo: R$ {conta.saldo}")`,
       id: `python-path-${assessment.level}`,
       title: `Python ${assessment.level.charAt(0).toUpperCase() + assessment.level.slice(1)}`,
       description: `Trilha personalizada de Python para nível ${assessment.level}`,
-      level: assessment.level === 'unknown' ? 'beginner' : assessment.level,
+      level: assessment.level as 'beginner' | 'intermediate' | 'advanced',
       language: 'python',
       estimatedTime: assessment.level === 'beginner' ? '4-6 semanas' : assessment.level === 'intermediate' ? '3-4 semanas' : '2-3 semanas',
       topics: baseTopics
@@ -274,7 +274,7 @@ print(f"Saldo: R$ {conta.saldo}")`,
       id: `javascript-path-${assessment.level}`,
       title: `JavaScript ${assessment.level.charAt(0).toUpperCase() + assessment.level.slice(1)}`,
       description: `Trilha personalizada de JavaScript para nível ${assessment.level}`,
-      level: assessment.level === 'unknown' ? 'beginner' : assessment.level,
+      level: assessment.level as 'beginner' | 'intermediate' | 'advanced',
       language: 'javascript',
       estimatedTime: '3-5 semanas',
       topics: []
@@ -286,7 +286,7 @@ print(f"Saldo: R$ {conta.saldo}")`,
       id: `generic-path-${assessment.level}`,
       title: `${assessment.language} Learning Path`,
       description: `Trilha personalizada para ${assessment.language}`,
-      level: assessment.level === 'unknown' ? 'beginner' : assessment.level,
+      level: assessment.level as 'beginner' | 'intermediate' | 'advanced',
       language: assessment.language,
       estimatedTime: '4-6 semanas',
       topics: []
