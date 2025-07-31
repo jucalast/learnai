@@ -5,6 +5,8 @@
  */
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { geminiClient } from './gemini';
+import { StaticExamplesManager } from './staticExamples';
 import { 
   ChatMessage, 
   CodeExercise, 
@@ -16,6 +18,7 @@ import {
   SessionProgress
 } from '@/types/learningSystem';
 
+// ⚠️ DEPRECATED: Estas configurações serão removidas em favor do geminiClient
 // Configuração dual de IAs especializadas com chaves diferentes
 const chatGenAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY || '');
 const codeGenAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY_SECONDARY || '');
@@ -388,7 +391,8 @@ Responda em JSON:
 }`;
 
     try {
-      const result = await codeAI.generateContent(prompt);
+      // 🆕 Usar o novo cliente Gemini com fallback automático
+      const result = await geminiClient.generateContentWithFallback(prompt);
       let responseText = result.response.text().replace(/```json|```/g, '').trim();
       
       // Tentar limpar a resposta se não for JSON válido
@@ -400,7 +404,34 @@ Responda em JSON:
         }
       }
       
-      const response = JSON.parse(responseText);
+      // Validação e limpeza adicional do JSON
+      let response;
+      try {
+        response = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('❌ Erro no parsing JSON inicial:', parseError);
+        console.log('📄 Texto recebido:', responseText);
+        
+        // Tentar regex para extrair JSON
+        const jsonMatch = responseText.match(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/);
+        if (jsonMatch) {
+          try {
+            response = JSON.parse(jsonMatch[0]);
+            console.log('✅ JSON extraído com regex funcionou');
+          } catch (regexError) {
+            console.error('❌ Regex parse também falhou, criando fallback');
+            response = {
+              code: `# Exemplo básico de ${this.currentContext?.currentTopic.title || 'programação'}\nprint("Olá, mundo!")`,
+              explanation: "Exemplo básico gerado automaticamente devido a erro na IA."
+            };
+          }
+        } else {
+          response = {
+            code: `# Exemplo básico de ${this.currentContext?.currentTopic.title || 'programação'}\nprint("Olá, mundo!")`,
+            explanation: "Exemplo básico gerado automaticamente devido a erro na IA."
+          };
+        }
+      }
       
       console.log('✅ Código INTELIGENTE gerado:', {
         linhas: response.code.split('\n').length,
@@ -410,14 +441,29 @@ Responda em JSON:
       
       return response;
     } catch (error) {
-      // Mostrar erro em vez de usar fallback silencioso
-      if (error instanceof Error && error.message.includes('quota')) {
-        console.error('❌ ERRO: Quota da API Gemini excedida!', error.message);
-        throw new Error('Quota da API Gemini excedida. Limite de 50 requests/dia atingido.');
-      } else {
-        console.error('❌ ERRO ao gerar código inteligente:', error);
-        throw error; // Re-throw para que o erro seja propagado
+      console.error('❌ ERRO ao gerar código inteligente:', error);
+      
+      // 🔄 FALLBACK: Usar exemplos estáticos quando API falha
+      console.log('🔄 Usando exemplo estático como fallback...');
+      const staticExample = StaticExamplesManager.getExample(
+        this.currentContext?.userAssessment.language || 'python',
+        this.currentContext?.currentTopic.title,
+        adaptiveLevel
+      );
+      
+      if (staticExample) {
+        console.log('✅ Exemplo estático encontrado:', staticExample.topic);
+        return {
+          code: staticExample.code,
+          explanation: staticExample.explanation + ' (Exemplo estático - API temporariamente indisponível)'
+        };
       }
+      
+      // Último fallback: exemplo muito básico
+      return {
+        code: `# Exemplo básico de ${this.currentContext?.currentTopic.title || 'programação'}\nprint("Olá, mundo!")`,
+        explanation: "Exemplo básico gerado automaticamente devido a indisponibilidade temporária da API."
+      };
     }
   }
 
@@ -603,7 +649,8 @@ Formato obrigatório:
 JSON de resposta:`;
 
     try {
-      const result = await codeAI.generateContent(prompt);
+      // 🆕 Tentar usar API com fallback automático primeiro
+      const result = await geminiClient.generateContentWithFallback(prompt);
       const responseText = result.response.text().trim();
       
       // Tentar extrair JSON do texto de resposta
@@ -623,14 +670,17 @@ JSON de resposta:`;
           try {
             response = JSON.parse(jsonMatch[0]);
           } catch (regexParseError) {
-            console.error('❌ Regex JSON parse também falhou');
-            throw new Error('IA não retornou JSON válido');
+            console.error('❌ Regex JSON parse também falhou, criando fallback');
+            response = {
+              code: `# Exemplo de ${userMessage}\nprint("Exemplo baseado em: ${userMessage}")`,
+              explanation: `Aqui está um exemplo de ${userMessage} em ${this.currentContext?.userAssessment.language || 'Python'}`
+            };
           }
         } else {
           // Se não conseguir extrair JSON, criar manualmente
           console.log('⚠️ Criando estrutura manual a partir do texto da IA');
           const lines = responseText.split('\n');
-          const codeLines = lines.filter(line => 
+          const codeLines = lines.filter((line: string) => 
             line.includes('def ') || 
             line.includes('print(') || 
             line.includes('=') || 
@@ -654,8 +704,21 @@ JSON de resposta:`;
       
       return response;
     } catch (error) {
-      console.error('❌ Erro ao gerar código específico inteligente:', error);
-      throw error; // Propagar erro em vez de usar fallback
+      console.error('❌ Erro ao gerar código específico, tentando fallback estático...', error);
+      
+      // 🔄 FALLBACK: Usar exemplos estáticos
+      const staticExample = StaticExamplesManager.getExampleForUserMessage(
+        this.currentContext?.userAssessment.language || 'python',
+        userMessage,
+        adaptiveLevel
+      );
+      
+      console.log('✅ Usando exemplo estático como fallback:', staticExample.topic);
+      
+      return {
+        code: staticExample.code,
+        explanation: staticExample.explanation + ' (Exemplo estático - API temporariamente indisponível)'
+      };
     }
   }
   // Métodos auxiliares...

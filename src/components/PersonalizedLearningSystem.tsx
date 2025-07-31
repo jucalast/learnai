@@ -732,18 +732,19 @@ export default function PersonalizedLearningSystem({
           coordinatorRef.current && 
           !hasStartedLearningRef.current) {
         
-        // Verificar se já existe uma sessão ativa para evitar duplicatas
-        const sessionKey = `session_${language}_${assessment.id}`;
+        // Verificação múltipla para evitar duplicatas
+        const sessionKey = `session_${language}_${assessment.id}_${curriculum.currentTopicIndex}`;
         if (sessionStorage.getItem(sessionKey)) {
-          console.log('🚫 Sessão já iniciada para esta linguagem/assessment');
+          console.log('🚫 Sessão já iniciada para esta linguagem/assessment/tópico');
           return;
         }
         
         const currentTopic = curriculum.topics[curriculum.currentTopicIndex];
         
         if (currentTopic) {
-          hasStartedLearningRef.current = true; // Marca como iniciado
-          sessionStorage.setItem(sessionKey, 'true'); // Marca sessão como ativa
+          // Marcar ANTES de iniciar para evitar duplicação
+          hasStartedLearningRef.current = true;
+          sessionStorage.setItem(sessionKey, 'true');
           
           console.log('🚀 INICIANDO SESSÃO DE APRENDIZADO (ÚNICA VEZ)');
           console.log('📚 Tópico:', currentTopic.title);
